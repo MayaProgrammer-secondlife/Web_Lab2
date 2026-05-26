@@ -2,9 +2,6 @@ using Microsoft.JSInterop;
 
 namespace AtelierWasm.Services;
 
-/// <summary>
-/// Обёртка над localStorage через JS interop (функции window.rbStorage).
-/// </summary>
 public sealed class LocalStorageService(IJSRuntime jsRuntime)
 {
     private readonly IJSRuntime _jsRuntime = jsRuntime;
