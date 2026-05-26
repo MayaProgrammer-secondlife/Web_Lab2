@@ -1,0 +1,22 @@
+@inherits LayoutComponentBase
+
+<header class="site-header">
+    <div class="site-header__inner">
+        <div class="brand">Ателье «Изящный стежок»</div>
+        <NavMenu />
+        <div class="header-actions">
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Переключить тему">
+                Тема
+            </button>
+        </div>
+    </div>
+</header>
+
+<main>
+    @Body
+</main>
+
+<footer class="site-footer">
+    <p>© 2026 Ателье «Изящный стежок» · г. Москва, ул. Модная, 15 · +7 (495) 123-45-67</p>
+    <p class="footer-note">Учебный проект · Blazor WebAssembly</p>
+</footer>

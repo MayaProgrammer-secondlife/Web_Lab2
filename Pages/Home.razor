@@ -1,0 +1,103 @@
+@page "/"
+
+<PageTitle>Ателье «Изящный стежок» — главная</PageTitle>
+
+<section class="hero">
+    <h1>Добро пожаловать в наше ателье</h1>
+    <p class="lead">
+        Индивидуальный пошив, ремонт и подгонка одежды любой сложности.
+        Качество, стиль и внимание к деталям с 2010 года.
+    </p>
+    <p><a href="services" class="btn">Посмотреть услуги →</a></p>
+</section>
+
+<div class="card-grid">
+    <article class="card">
+        <h2>Пошив на заказ</h2>
+        <p>Создадим идеальное платье, костюм или верхнюю одежду по вашим меркам и эскизу.</p>
+        <p><a href="services#tailoring">Подробнее</a></p>
+    </article>
+    <article class="card">
+        <h2>Ремонт одежды</h2>
+        <p>Замена молний, подшив, реставрация — вернём вещам вторую жизнь.</p>
+        <p><a href="services#repair">Подробнее</a></p>
+    </article>
+    <article class="card">
+        <h2>Подгонка по фигуре</h2>
+        <p>Купили вещь не по размеру? Подгоним под вашу фигуру быстро и аккуратно.</p>
+        <p><a href="services#alterations">Подробнее</a></p>
+    </article>
+</div>
+
+<section class="draft-section">
+    <article class="card form-draft">
+        <h2>Записать идею для заказа</h2>
+        <div id="draft-form">
+            <label for="draft-title">Название проекта / тип изделия</label>
+            <input id="draft-title" type="text" autocomplete="off" maxlength="120"
+                   placeholder="Например: вечернее платье"
+                   @bind="_draftTitle" @bind:event="oninput" />
+
+            <label for="draft-body">Пожелания, ткань, детали</label>
+            <textarea id="draft-body" rows="5" maxlength="4000"
+                      placeholder="Опишите вашу идею..."
+                      @bind="_draftBody" @bind:event="oninput"></textarea>
+
+            <button type="button" @onclick="SaveDraft">Сохранить черновик</button>
+            <p class="draft-status" aria-live="polite">@_draftStatus</p>
+        </div>
+    </article>
+</section>
+
+@code {
+    [Inject] private LocalStorageService Storage { get; set; } = default!;
+
+    private string _draftTitle = "";
+    private string _draftBody  = "";
+    private string _draftStatus = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var raw = await Storage.GetAsync("atelier_draft");
+        if (raw is null)
+        {
+            _draftStatus = "Черновик не сохранён.";
+        }
+        else
+        {
+            try
+            {
+                var data = System.Text.Json.JsonSerializer.Deserialize<DraftPayload>(raw);
+                if (data is not null)
+                {
+                    _draftTitle  = data.Title ?? "";
+                    _draftBody   = data.Body  ?? "";
+                    _draftStatus = "Загружен сохранённый черновик.";
+                }
+            }
+            catch
+            {
+                _draftStatus = "Не удалось прочитать черновик.";
+            }
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveDraft()
+    {
+        var payload = System.Text.Json.JsonSerializer.Serialize(
+            new DraftPayload(_draftTitle, _draftBody));
+        try
+        {
+            await Storage.SetAsync("atelier_draft", payload);
+            _draftStatus = "Черновик сохранён локально.";
+        }
+        catch (Exception ex)
+        {
+            _draftStatus = $"Ошибка сохранения: {ex.Message}";
+        }
+    }
+
+    private sealed record DraftPayload(string? Title, string? Body);
+}

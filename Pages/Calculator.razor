@@ -1,0 +1,201 @@
+@page "/calculator"
+@using System.Text.Json
+
+<PageTitle>Калькулятор стоимости — Ателье «Изящный стежок»</PageTitle>
+
+<section class="page-header">
+    <h1>Калькулятор стоимости</h1>
+    <p>Оценка стоимости и срока выполнения заказа — расчёт на клиенте (WASM)</p>
+</section>
+
+<article class="service-card">
+    <h2>Параметры заказа</h2>
+
+    <div class="calc-field">
+        <label for="svc-type">Вид услуги</label>
+        <select id="svc-type" @bind="_serviceType">
+            <option value="@ServiceType.Tailoring">Индивидуальный пошив</option>
+            <option value="@ServiceType.Repair">Ремонт одежды</option>
+            <option value="@ServiceType.Alterations">Подгонка по фигуре</option>
+        </select>
+    </div>
+
+    @if (_serviceType == ServiceType.Tailoring)
+    {
+        <div class="calc-field">
+            <label for="fabric">Ткань (метры)</label>
+            <input id="fabric" type="number" min="0" step="0.1"
+                   @bind="_fabricMeters" @bind:event="oninput" />
+            <span class="calc-hint">Стоимость ткани рассчитывается по 400 ₽/м</span>
+        </div>
+    }
+
+    <div class="calc-field">
+        <label>Уровень сложности</label>
+        <div class="complexity-group">
+            <label class="complexity-option @(_complexity == 1 ? "active" : "")">
+                <input type="radio" name="complexity" value="1"
+                       @onchange="() => _complexity = 1" checked="@(_complexity == 1)" />
+                Простой
+            </label>
+            <label class="complexity-option @(_complexity == 2 ? "active" : "")">
+                <input type="radio" name="complexity" value="2"
+                       @onchange="() => _complexity = 2" />
+                Средний
+            </label>
+            <label class="complexity-option @(_complexity == 3 ? "active" : "")">
+                <input type="radio" name="complexity" value="3"
+                       @onchange="() => _complexity = 3" />
+                Сложный
+            </label>
+        </div>
+    </div>
+
+    <div class="calc-actions">
+        <button type="button" class="btn" @onclick="Calculate">Рассчитать</button>
+        <button type="button" class="btn btn-secondary" @onclick="SaveParams">Сохранить параметры</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <p class="calc-error" role="alert">@_error</p>
+    }
+
+    @if (_estimate is not null)
+    {
+        <div class="calc-result" aria-live="polite">
+            <h3>Результат расчёта</h3>
+            <table class="result-table">
+                <tbody>
+                    <tr>
+                        <th>Вид услуги</th>
+                        <td>@ServiceTypeLabel(_serviceType)</td>
+                    </tr>
+                    <tr>
+                        <th>Уровень сложности</th>
+                        <td>@ComplexityLabel(_complexity)</td>
+                    </tr>
+                    @if (_serviceType == ServiceType.Tailoring)
+                    {
+                        <tr>
+                            <th>Ткань</th>
+                            <td>@_fabricMeters м</td>
+                        </tr>
+                    }
+                    <tr class="result-highlight">
+                        <th>Стоимость (оценка)</th>
+                        <td>от @_estimate.MinCost.ToString("N0") ₽ до @_estimate.MaxCost.ToString("N0") ₽</td>
+                    </tr>
+                    <tr>
+                        <th>Срок выполнения</th>
+                        <td>от @_estimate.EstimatedDays @DaysLabel(_estimate.EstimatedDays)</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="service-note">
+                Расчёт является предварительным. Точную стоимость уточняйте у мастера при консультации.
+            </p>
+        </div>
+    }
+
+    <p class="draft-status" aria-live="polite">@_saveStatus</p>
+</article>
+
+@code {
+    [Inject] private LocalStorageService Storage { get; set; } = default!;
+
+    private ServiceType _serviceType = ServiceType.Tailoring;
+    private decimal     _fabricMeters = 2.0m;
+    private int         _complexity   = 1;
+    private OrderEstimate? _estimate;
+    private string?     _error;
+    private string      _saveStatus = "";
+
+    private const string StorageKey = "atelier_calc_params";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await LoadParams();
+        StateHasChanged();
+    }
+
+    private void Calculate()
+    {
+        _error    = null;
+        _estimate = null;
+        try
+        {
+            var request = new OrderRequest(_serviceType, _fabricMeters, _complexity);
+            _estimate   = OrderCalculator.Calculate(request);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SaveParams()
+    {
+        var payload = JsonSerializer.Serialize(new CalcPayload(
+            (int)_serviceType, _fabricMeters, _complexity));
+        try
+        {
+            await Storage.SetAsync(StorageKey, payload);
+            _saveStatus = "Параметры сохранены в браузере.";
+        }
+        catch (Exception ex)
+        {
+            _saveStatus = $"Ошибка сохранения: {ex.Message}";
+        }
+    }
+
+    private async Task LoadParams()
+    {
+        var raw = await Storage.GetAsync(StorageKey);
+        if (raw is null)
+        {
+            _saveStatus = "";
+            return;
+        }
+        try
+        {
+            var data = JsonSerializer.Deserialize<CalcPayload>(raw);
+            if (data is not null)
+            {
+                _serviceType  = (ServiceType)data.ServiceType;
+                _fabricMeters = data.FabricMeters;
+                _complexity   = data.Complexity;
+                _saveStatus   = "Загружены сохранённые параметры.";
+            }
+        }
+        catch
+        {
+            _saveStatus = "";
+        }
+    }
+
+    private static string ServiceTypeLabel(ServiceType t) => t switch
+    {
+        ServiceType.Tailoring   => "Индивидуальный пошив",
+        ServiceType.Repair      => "Ремонт одежды",
+        ServiceType.Alterations => "Подгонка по фигуре",
+        _                       => t.ToString()
+    };
+
+    private static string ComplexityLabel(int c) => c switch
+    {
+        1 => "Простой",
+        2 => "Средний",
+        3 => "Сложный",
+        _ => c.ToString()
+    };
+
+    private static string DaysLabel(int d) => d switch
+    {
+        1 => "дня",
+        _ => "дней"
+    };
+
+    private sealed record CalcPayload(int ServiceType, decimal FabricMeters, int Complexity);
+}
